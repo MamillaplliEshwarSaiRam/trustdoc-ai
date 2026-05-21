@@ -4,7 +4,7 @@
 [![Streamlit](https://img.shields.io/badge/Streamlit-App-red)](https://streamlit.io/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-TrustDoc AI is a trust-aware RAG chatbot for real-world documents. Users can upload PDFs, Markdown, or text files, ask questions, and receive answers with source citations, confidence scoring, knowledge-gap detection, conflict warnings, and document health diagnostics.
+TrustDoc AI is a trust-aware RAG chatbot for real-world documents. Users can upload PDFs, Word documents, Markdown, or text files, ask questions, and receive answers with source citations, confidence scoring, knowledge-gap detection, conflict warnings, and document health diagnostics.
 
 > Built as an open-source portfolio project to demonstrate practical RAG engineering beyond a basic document chatbot.
 
@@ -52,7 +52,7 @@ Documents
 
 ```mermaid
 flowchart TD
-    A[Upload PDF, Markdown, or TXT] --> B[Extract Text]
+    A[Upload PDF, DOCX, Markdown, or TXT] --> B[Extract Text]
     B --> C[Structure-Aware Chunking]
     C --> D[Build Retriever]
     C --> K[Build Knowledge Graph]
@@ -78,6 +78,7 @@ flowchart TD
 - Optional Google Gemini embeddings
 - Optional OpenAI embeddings and chat generation
 - pypdf for PDF text extraction
+- python-docx for Word document extraction
 - python-dotenv for configuration
 
 The app runs without an API key by using a local TF-IDF retriever and extractive answers. Add a Google AI Studio key to use Gemini embeddings for semantic retrieval, or add an OpenAI key to use OpenAI embeddings and generated responses.

@@ -100,7 +100,7 @@ def _extract_headings(chunks: list[Chunk]) -> list[str]:
 def _source_names(chunks: list[Chunk]) -> list[str]:
     names = []
     for chunk in chunks:
-        name = re.sub(r"\.(pdf|md|txt)$", "", chunk.source, flags=re.IGNORECASE)
+        name = re.sub(r"\.(pdf|md|txt|docx)$", "", chunk.source, flags=re.IGNORECASE)
         name = name.replace("_", " ").replace("-", " ").strip()
         if name:
             names.append(name)

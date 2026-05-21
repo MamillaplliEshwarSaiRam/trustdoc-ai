@@ -104,7 +104,7 @@ def _best_subject(question: str, chunks: list[Chunk]) -> str:
     question_terms = set(_terms(question)) - VAGUE_TERMS
     candidates: Counter[str] = Counter()
     for chunk in chunks[:8]:
-        source = re.sub(r"\.(pdf|md|txt)$", "", chunk.source, flags=re.IGNORECASE)
+        source = re.sub(r"\.(pdf|md|txt|docx)$", "", chunk.source, flags=re.IGNORECASE)
         source = source.replace("_", " ").replace("-", " ").strip()
         _score_candidate(source, question_terms, candidates, weight=1)
         for line in chunk.text.splitlines():
