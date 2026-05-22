@@ -2,12 +2,11 @@ from __future__ import annotations
 
 import re
 from io import BytesIO
-from pathlib import Path
 
 import streamlit as st
 
 from src.config import get_settings
-from src.document_loader import SUPPORTED_EXTENSIONS, load_file_bytes, load_local_path
+from src.document_loader import SUPPORTED_EXTENSIONS, load_file_bytes
 from src.graph_rag import KnowledgeGraph, build_knowledge_graph
 from src.health import build_health_report
 from src.models import Chunk, RawDocument
@@ -15,10 +14,6 @@ from src.rag import ANSWER_MODES, answer_question, compare_documents
 from src.splitter import split_documents
 from src.suggestions import suggest_questions
 from src.vector_store import SearchIndex
-
-
-ROOT = Path(__file__).parent
-SAMPLE_DIR = ROOT / "sample_docs"
 
 
 st.set_page_config(page_title="TrustDoc AI", page_icon="TD", layout="wide")
@@ -90,7 +85,6 @@ def main() -> None:
         cached_uploads = st.session_state.get("uploaded_file_cache", [])
         if cached_uploads:
             st.caption("Ready to index: " + ", ".join(file["name"] for file in cached_uploads))
-        include_samples = st.checkbox("Include sample documents", value=True)
         _render_index_freshness_warning()
         process_clicked = st.button("Build knowledge base", type="primary", use_container_width=True)
         clear_clicked = st.button("Clear session", use_container_width=True)
@@ -100,9 +94,9 @@ def main() -> None:
         st.rerun()
 
     if process_clicked:
-        documents = _load_documents(include_samples)
+        documents = _load_documents()
         if not documents:
-            st.warning("Upload at least one supported document or include the sample documents.")
+            st.warning("Upload at least one supported document before building the knowledge base.")
         else:
             with st.spinner("Extracting text, chunking documents, and building the retriever..."):
                 chunks = split_documents(
@@ -136,7 +130,7 @@ def main() -> None:
     with left:
         st.subheader("Ask Documents")
         if not index:
-            st.info("Build the knowledge base from the sidebar to start. Sample documents are included for a quick demo.")
+            st.info("Upload documents from the sidebar and build the knowledge base to start.")
         if "pending_question" in st.session_state:
             st.session_state["question_input"] = st.session_state.pop("pending_question")
         query = st.text_input(
@@ -145,12 +139,15 @@ def main() -> None:
             placeholder="Example: What are the refund deadlines and exceptions?",
         )
         col_a, col_b = st.columns([0.5, 0.5])
-        ask_clicked = col_a.button("Ask", type="primary", use_container_width=True, disabled=not index or not query)
-        compare_clicked = col_b.button("Compare documents", use_container_width=True, disabled=not index or not query)
+        ask_clicked = col_a.button("Ask", type="primary", use_container_width=True, disabled=not index)
+        compare_clicked = col_b.button("Compare documents", use_container_width=True, disabled=not index)
+        submitted_question = st.session_state.get("question_input", "").strip()
 
-        if ask_clicked and index:
+        if (ask_clicked or compare_clicked) and index and not submitted_question:
+            st.warning("Enter a question before asking the documents.")
+        elif ask_clicked and index:
             st.session_state["last_response"] = answer_question(
-                query,
+                submitted_question,
                 index,
                 settings,
                 mode,
@@ -160,9 +157,9 @@ def main() -> None:
                 answer_provider=answer_provider,
                 rewrite_queries=rewrite_queries,
             )
-        if compare_clicked and index:
+        elif compare_clicked and index:
             st.session_state["last_response"] = compare_documents(
-                query,
+                submitted_question,
                 index,
                 settings,
                 conflict_mode=conflict_mode,
@@ -191,12 +188,8 @@ def _cache_uploaded_files(uploaded_files: list[object] | None) -> None:
     ]
 
 
-def _load_documents(include_samples: bool) -> list[RawDocument]:
+def _load_documents() -> list[RawDocument]:
     documents: list[RawDocument] = []
-    if include_samples:
-        for sample in sorted(SAMPLE_DIR.glob("*")):
-            if sample.suffix.lower() in SUPPORTED_EXTENSIONS:
-                documents.extend(load_local_path(sample))
     for uploaded_file in st.session_state.get("uploaded_file_cache", []):
         documents.extend(load_file_bytes(uploaded_file["name"], BytesIO(uploaded_file["data"])))
     return documents

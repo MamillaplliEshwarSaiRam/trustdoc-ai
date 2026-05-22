@@ -189,7 +189,7 @@ TrustDoc AI can run fully locally for demos:
 
 - Select **Local TF-IDF** as the embedding provider.
 - Select **Local extractive** as the answer provider.
-- Use the included sample documents.
+- Upload your own documents or use the files in `sample_docs/` for a quick local demo.
 
 This mode is useful for contributors, reviewers, and recruiters who want to try the project without creating API keys.
 
@@ -204,7 +204,7 @@ The LLM conflict judge is instructed not to flag differences that are explainabl
 
 ## Example Questions
 
-Try these with the included sample documents:
+Try these after uploading the demo files from `sample_docs/`:
 
 - What is the refund window and what items are not refundable?
 - What are the steps required to request remote work?
@@ -236,7 +236,7 @@ What is the company's parental leave policy?
 Expected behavior:
 
 ```text
-TrustDoc AI refuses to answer because the sample documents do not contain that information.
+TrustDoc AI refuses to answer because the uploaded demo documents do not contain that information.
 ```
 
 ## Project Structure
