@@ -57,7 +57,7 @@ RULE_PATTERNS = [
         "Attempts to force an unsupported answer.",
     ),
     (
-        re.compile(r"\b(always|only)\b.{0,60}\b(mention|answer|say|claim|tell|respond)\b", re.I),
+        re.compile(r"\b(always|only)\b.{0,60}\b(mention|answer|say|claim|tell|respond|give)\b", re.I),
         "Attempts to force a canned answer.",
     ),
     (
@@ -105,18 +105,24 @@ INSTRUCTION_MARKERS = {
 CONTROL_ONLY_TERMS = INSTRUCTION_MARKERS | {
     "above",
     "all",
+    "always",
     "any",
+    "api",
     "citation",
     "citations",
+    "give",
     "hidden",
     "key",
     "keys",
+    "me",
     "message",
     "messages",
     "not",
+    "only",
     "previous",
     "rule",
     "user",
+    "your",
 }
 
 QUESTION_INTENT_WORDS = {
@@ -167,6 +173,21 @@ EMBEDDING_THRESHOLD = 0.74
 LOCAL_SIMILARITY_THRESHOLD = 0.34
 
 _ATTACK_EMBEDDING_CACHE: dict[tuple[str, str], list[list[float]]] = {}
+
+USER_ONLY_RULE_PATTERNS = [
+    (
+        re.compile(r"\b(api keys?|credentials?|secrets?|tokens?|passwords?)\b", re.I),
+        "Requests secrets, credentials, tokens, or API keys.",
+    ),
+    (
+        re.compile(r"\b(reveal|print|show|expose|leak|display|give)\b.{0,90}\b(system prompt|developer message|hidden instructions?|private context|internal config(?:uration)?)\b", re.I),
+        "Requests hidden prompts, private context, or internal configuration.",
+    ),
+    (
+        re.compile(r"\b(always|only)\b.{0,60}\b(mention|answer|say|claim|tell|respond|give)\b", re.I),
+        "Attempts to force a canned answer.",
+    ),
+]
 
 
 @dataclass(frozen=True)
@@ -226,17 +247,29 @@ def apply_prompt_injection_guard(
 def detect_prompt_injection_in_question(question: str, settings: Settings) -> list[PromptInjectionWarning]:
     """Scan only the user question for instruction-like attacks."""
     user_record = _SentenceRecord(text=question, citation="User question", source="User question")
-    return _detect_records([user_record], settings)
+    findings = {
+        (warning.citation, _normalize(warning.text)): warning
+        for warning in _detect_records([user_record], settings)
+    }
+    for reason in _user_only_reasons(question):
+        _store_finding(findings, user_record, reason, 0.98, "user rule")
+    return sorted(findings.values(), key=lambda warning: warning.score, reverse=True)
 
 
 def should_refuse_user_prompt(question: str, warnings: list[PromptInjectionWarning]) -> bool:
     """Return True when the prompt is only an instruction attack, not a document question."""
     if not any(warning.citation == "User question" for warning in warnings):
         return False
+    if _user_only_reasons(question):
+        return True
     if _has_question_intent(question):
         return False
     meaningful_terms = [term for term in _tokens(question) if term not in CONTROL_ONLY_TERMS]
     return len(meaningful_terms) <= 1
+
+
+def _user_only_reasons(text: str) -> list[str]:
+    return [reason for pattern, reason in USER_ONLY_RULE_PATTERNS if pattern.search(text)]
 
 
 def _records_from_retrieved(retrieved: list[RetrievedChunk]) -> list[_SentenceRecord]:
