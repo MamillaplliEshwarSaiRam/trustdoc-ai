@@ -8,6 +8,7 @@ import re
 from src.config import Settings
 from src.context_compressor import compress_retrieved_context
 from src.models import RetrievedChunk
+from src.prompt_injection import UNTRUSTED_EVIDENCE_INSTRUCTION
 from src.trust import detect_conflicts
 
 
@@ -71,6 +72,8 @@ def _build_prompt(question: str, retrieved: list[RetrievedChunk]) -> str:
     )
     return f"""
 You are an evidence conflict analyst for a retrieval-augmented chatbot.
+
+{UNTRUSTED_EVIDENCE_INSTRUCTION}
 
 User question:
 {question}

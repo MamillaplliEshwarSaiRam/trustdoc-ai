@@ -18,6 +18,7 @@ Most portfolio RAG demos stop at "upload PDF, ask a question." TrustDoc AI adds 
 - Query rewriting for vague questions before retrieval
 - Local hybrid reranking and adaptive evidence selection before generation
 - Adaptive context compression to reduce LLM prompt size
+- Semantic prompt-injection guard for untrusted document text
 - Optional Graph-Enhanced RAG for relationship-aware retrieval
 - LLM-based conflict detection for possibly inconsistent document claims
 - Knowledge-gap detection
@@ -45,6 +46,7 @@ Documents
   -> Local TF-IDF, Google Gemini embeddings, or OpenAI embeddings
   -> Vector or graph-enhanced retrieval
   -> Local reranking and adaptive context selection
+  -> Prompt-injection scan and evidence sanitization
   -> Context compression for API prompts
   -> Answer generation
   -> Trust scoring, gaps, conflicts, citations
@@ -60,7 +62,8 @@ flowchart TD
     K --> F[Graph Expansion]
     E --> F[Retrieve Evidence]
     F --> L[Local Reranking and Adaptive Selection]
-    L --> M[Context Compression]
+    L --> N[Prompt Injection Guard]
+    N --> M[Context Compression]
     M --> G[Generate Answer]
     L --> H[Trust Score]
     M --> I[Conflict and Gap Checks]
@@ -118,7 +121,21 @@ The final evidence window is selected adaptively. The app stops adding chunks wh
 
 For specific questions, TrustDoc AI compresses selected chunks before sending them to Gemini or OpenAI. It keeps the citation, relevant heading, BM25-matched sentences, and nearby condition or exception sentences.
 
-Compression is skipped for broad summary and comparison questions where the surrounding context matters more. The app still shows the original retrieved chunks in the citation panel, while the API prompt receives a smaller evidence version to reduce input tokens.
+Compression is skipped for broad summary and comparison questions where the surrounding context matters more. The app shows the selected evidence in the citation panel, while the API prompt receives a smaller evidence version to reduce input tokens.
+
+## Prompt Injection Guard
+
+TrustDoc AI treats uploaded documents as untrusted content. Before answer generation, it scans the user question and retrieved evidence for instruction-like attacks such as attempts to override system rules, disable citations, reveal hidden prompts, or force unsupported answers.
+
+The guard uses layered detection:
+
+- Rule checks for direct attack patterns
+- Semantic similarity against prompt-injection examples
+- Evidence sanitization that removes flagged document sentences before they reach Gemini or OpenAI
+- UI warnings that show what was blocked and why
+- Trust-score penalties when suspicious content is detected
+
+This is not a complete enterprise security boundary, but it gives the project a practical, high-ROI defense against common RAG prompt-injection attacks.
 
 ## Query Rewriting
 
@@ -259,6 +276,7 @@ trustdoc-ai/
     graph_rag.py
     health.py
     models.py
+    prompt_injection.py
     query_rewriter.py
     rag.py
     reranker.py

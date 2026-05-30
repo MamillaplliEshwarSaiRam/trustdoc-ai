@@ -8,6 +8,7 @@ from collections import Counter
 
 from src.config import Settings
 from src.models import Chunk
+from src.prompt_injection import UNTRUSTED_EVIDENCE_INSTRUCTION
 
 
 FALLBACK_QUESTIONS = [
@@ -53,6 +54,8 @@ def _build_prompt(chunks: list[Chunk], limit: int) -> str:
     )
     return f"""
 You generate high-quality suggested questions for a document Q&A app.
+
+{UNTRUSTED_EVIDENCE_INSTRUCTION}
 
 Documents/chunks:
 {evidence}

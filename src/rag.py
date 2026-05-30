@@ -9,7 +9,13 @@ from src.config import Settings
 from src.conflicts import analyze_conflicts
 from src.context_compressor import compress_retrieved_context
 from src.graph_rag import KnowledgeGraph, graph_enhance_retrieval
-from src.models import RAGResponse, RetrievedChunk
+from src.models import RAGResponse, RetrievedChunk, TrustReport
+from src.prompt_injection import (
+    UNTRUSTED_EVIDENCE_INSTRUCTION,
+    apply_prompt_injection_guard,
+    detect_prompt_injection_in_question,
+    should_refuse_user_prompt,
+)
 from src.query_rewriter import rewrite_query
 from src.reranker import rerank_and_select
 from src.trust import evaluate_trust
@@ -42,6 +48,10 @@ def answer_question(
     answer_provider: str = "Local extractive",
     rewrite_queries: bool = True,
 ) -> RAGResponse:
+    user_prompt_warnings = detect_prompt_injection_in_question(question, settings)
+    if should_refuse_user_prompt(question, user_prompt_warnings):
+        return _prompt_injection_refusal(user_prompt_warnings, mode)
+
     retrieval_query = rewrite_query(question, index.chunks, settings, enabled=rewrite_queries)
     candidate_limit = _candidate_limit(index, settings.max_context_chunks)
     retrieved = index.search(retrieval_query, top_k=candidate_limit)
@@ -57,26 +67,38 @@ def answer_question(
     if overview_question and not retrieved:
         retrieved = index.overview(top_k=settings.max_context_chunks)
 
-    api_retrieved = compress_retrieved_context(question, retrieved, mode)
+    guarded_retrieved, prompt_injection_warnings = apply_prompt_injection_guard(
+        question,
+        retrieved,
+        settings,
+        user_warnings=user_prompt_warnings,
+    )
+    api_retrieved = compress_retrieved_context(question, guarded_retrieved, mode)
     if overview_question:
-        answer = _answer_overview(retrieved)
+        answer = _answer_overview(guarded_retrieved)
     elif answer_provider == "Gemini" and settings.google_api_key:
         try:
             answer = _answer_with_gemini(question, api_retrieved, settings, mode)
         except Exception as exc:
-            answer = _answer_locally(question, retrieved, mode)
+            answer = _answer_locally(question, guarded_retrieved, mode)
             answer += f"\n\nNote: Gemini generation failed, so a local extractive answer was used. Error: {exc}"
     elif (answer_provider == "OpenAI" or use_openai_chat) and settings.openai_api_key:
         try:
             answer = _answer_with_openai(question, api_retrieved, settings, mode)
         except Exception as exc:
-            answer = _answer_locally(question, retrieved, mode)
+            answer = _answer_locally(question, guarded_retrieved, mode)
             answer += f"\n\nNote: OpenAI generation failed, so a local extractive answer was used. Error: {exc}"
     else:
-        answer = _answer_locally(question, retrieved, mode)
+        answer = _answer_locally(question, guarded_retrieved, mode)
 
-    conflict_warnings = analyze_conflicts(question, retrieved, settings, conflict_mode)
-    trust = evaluate_trust(question, retrieved, answer, conflict_warnings=conflict_warnings)
+    conflict_warnings = analyze_conflicts(question, guarded_retrieved, settings, conflict_mode)
+    trust = evaluate_trust(
+        question,
+        guarded_retrieved,
+        answer,
+        conflict_warnings=conflict_warnings,
+        prompt_injection_warnings=prompt_injection_warnings,
+    )
     if trust.should_refuse:
         answer = (
             "I could not find enough support in the uploaded documents to answer this reliably. "
@@ -86,11 +108,38 @@ def answer_question(
         answer = highlight_key_facts(answer)
 
     rewritten_query = retrieval_query if retrieval_query != question else None
-    return RAGResponse(answer=answer, retrieved=retrieved, trust=trust, mode=mode, rewritten_query=rewritten_query)
+    return RAGResponse(
+        answer=answer,
+        retrieved=guarded_retrieved,
+        trust=trust,
+        mode=mode,
+        rewritten_query=rewritten_query,
+        prompt_injection_warnings=prompt_injection_warnings,
+    )
 
 
 def _candidate_limit(index: SearchIndex, max_context_chunks: int) -> int:
     return min(len(index.chunks), max(12, max_context_chunks * RETRIEVAL_POOL_MULTIPLIER))
+
+
+def _prompt_injection_refusal(warnings, mode: str) -> RAGResponse:
+    return RAGResponse(
+        answer=(
+            "I cannot follow that instruction because it looks like a prompt-injection attempt. "
+            "Ask a question about the uploaded documents, and I will answer with citations from the evidence."
+        ),
+        retrieved=[],
+        trust=TrustReport(
+            score=0,
+            label="Prompt injection blocked",
+            reasons=["The user prompt was an instruction-only request to change assistant behavior."],
+            gaps=["Ask a factual question about the uploaded documents."],
+            conflict_warnings=[],
+            should_refuse=True,
+        ),
+        mode=mode,
+        prompt_injection_warnings=warnings,
+    )
 
 
 def _select_final_evidence(
@@ -166,6 +215,7 @@ def _answer_with_openai(question: str, retrieved: list[RetrievedChunk], settings
                 "role": "system",
                 "content": (
                     "You are TrustDoc AI, a careful retrieval-augmented assistant. "
+                    f"{UNTRUSTED_EVIDENCE_INSTRUCTION} "
                     "Start with a direct answer to the user's question in the first sentence. "
                     "Use only the provided document evidence. If the evidence is insufficient, say what is missing. "
                     "Bold the most important factual values, such as durations, deadlines, amounts, dates, and percentages. "
@@ -185,6 +235,8 @@ def _answer_with_gemini(question: str, retrieved: list[RetrievedChunk], settings
     instruction = ANSWER_MODES.get(mode, ANSWER_MODES["Simple Answer"])
     prompt = f"""
 You are TrustDoc AI, a careful retrieval-augmented assistant.
+
+{UNTRUSTED_EVIDENCE_INSTRUCTION}
 
 Start with a direct answer to the user's question in the first sentence.
 Use only the provided document evidence.

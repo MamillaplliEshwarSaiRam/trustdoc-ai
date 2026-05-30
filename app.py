@@ -211,6 +211,9 @@ def _render_index_freshness_warning() -> None:
 
 
 def _render_response(response) -> None:
+    if response.prompt_injection_warnings:
+        _render_prompt_injection_alert(response.prompt_injection_warnings)
+
     st.markdown("### Answer")
     trust = response.trust
     score_col, label_col = st.columns([0.25, 0.75])
@@ -230,9 +233,27 @@ def _render_response(response) -> None:
             for warning in trust.conflict_warnings:
                 st.warning(warning)
 
-    with st.expander("Source citations", expanded=True):
-        for number, item in enumerate(response.retrieved, start=1):
-            _render_citation_card(number, item)
+    if response.retrieved:
+        with st.expander("Source citations", expanded=True):
+            for number, item in enumerate(response.retrieved, start=1):
+                _render_citation_card(number, item)
+
+
+def _render_prompt_injection_alert(warnings) -> None:
+    st.error(
+        f"Prompt injection detected: {len(warnings)} suspicious instruction-like "
+        "item(s) were blocked before answer generation."
+    )
+    with st.expander("Blocked prompt-injection details", expanded=True):
+        st.warning(
+            "The app treated this text as untrusted document/user content, removed flagged document "
+            "sentences from the generation context, and answered only from remaining evidence."
+        )
+        for warning in warnings:
+            st.markdown(f"**{warning.citation}**")
+            st.caption(f"{warning.detector} detector | score {warning.score:.2f}")
+            st.write(warning.reason)
+            st.code(_shorten(warning.text, 320), language="text")
 
 
 def _render_citation_card(number: int, item) -> None:

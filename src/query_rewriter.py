@@ -7,6 +7,7 @@ from collections import Counter
 
 from src.config import Settings
 from src.models import Chunk
+from src.prompt_injection import UNTRUSTED_EVIDENCE_INSTRUCTION
 
 
 VAGUE_TERMS = {
@@ -68,6 +69,8 @@ def _build_prompt(question: str, chunks: list[Chunk]) -> str:
     )
     return f"""
 Rewrite the user's question into a clear retrieval query for a RAG system.
+
+{UNTRUSTED_EVIDENCE_INSTRUCTION}
 
 Original question:
 {question}

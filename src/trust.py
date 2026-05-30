@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 
-from src.models import RetrievedChunk, TrustReport
+from src.models import PromptInjectionWarning, RetrievedChunk, TrustReport
 
 
 NEGATION_PATTERNS = [
@@ -23,10 +23,12 @@ def evaluate_trust(
     retrieved: list[RetrievedChunk],
     answer: str,
     conflict_warnings: list[str] | None = None,
+    prompt_injection_warnings: list[PromptInjectionWarning] | None = None,
 ) -> TrustReport:
     reasons: list[str] = []
     gaps: list[str] = []
     conflict_warnings = conflict_warnings if conflict_warnings is not None else detect_conflicts(retrieved)
+    prompt_injection_warnings = prompt_injection_warnings or []
 
     if not retrieved:
         return TrustReport(
@@ -56,6 +58,10 @@ def evaluate_trust(
     if conflict_warnings:
         score -= min(25, 10 * len(conflict_warnings))
         reasons.append("Potentially conflicting evidence was detected.")
+    if prompt_injection_warnings:
+        score -= min(30, 12 * len(prompt_injection_warnings))
+        reasons.append("Possible prompt injection was detected and excluded from answer context.")
+        gaps.append("Suspicious instruction-like text was removed before answer generation.")
 
     if top_score < 0.08:
         gaps.append("The closest source match is weak.")

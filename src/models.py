@@ -33,6 +33,16 @@ class RetrievedChunk:
     score: float
 
 
+@dataclass(frozen=True)
+class PromptInjectionWarning:
+    citation: str
+    source: str
+    text: str
+    reason: str
+    score: float
+    detector: str
+
+
 @dataclass
 class HealthReport:
     document_count: int
@@ -61,3 +71,4 @@ class RAGResponse:
     trust: TrustReport
     mode: str
     rewritten_query: str | None = None
+    prompt_injection_warnings: list[PromptInjectionWarning] = field(default_factory=list)
