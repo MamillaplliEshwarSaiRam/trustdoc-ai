@@ -37,6 +37,10 @@ RULE_PATTERNS = [
         "Attempts to override existing instructions.",
     ),
     (
+        re.compile(r"\b(ignore|disregard|forget|bypass|override)\b.{0,90}\b(learned|documents?|context|evidence|retrieved)\b", re.I),
+        "Attempts to override retrieved document evidence.",
+    ),
+    (
         re.compile(r"\b(reveal|print|show|expose|leak|display)\b.{0,90}\b(system prompt|developer message|hidden instructions?|api keys?|secrets?)\b", re.I),
         "Attempts to reveal hidden prompts or secrets.",
     ),
@@ -51,6 +55,18 @@ RULE_PATTERNS = [
     (
         re.compile(r"\b(answer|say|claim|tell the user|respond)\b.{0,90}\b(instead|regardless|even if|without evidence|no matter what)\b", re.I),
         "Attempts to force an unsupported answer.",
+    ),
+    (
+        re.compile(r"\b(always|only)\b.{0,60}\b(mention|answer|say|claim|tell|respond)\b", re.I),
+        "Attempts to force a canned answer.",
+    ),
+    (
+        re.compile(r"\bif asked\b.{0,120}\b(answer|say|claim|tell|respond|present)\b", re.I),
+        "Attempts to control future answers.",
+    ),
+    (
+        re.compile(r"\b(do not|don't|never)\b.{0,80}\b(mention|disclose|reveal)\b.{0,80}\b(instruction|note|prompt|source)\b", re.I),
+        "Attempts to hide injected instructions.",
     ),
     (
         re.compile(r"\b(system|assistant|developer)\s*:", re.I),
@@ -447,7 +463,7 @@ def _remove_blocked_sentences(text: str, blocked: set[str]) -> str:
         if not line:
             kept.append("")
             continue
-        if _looks_like_heading(line):
+        if _looks_like_heading(line) and _normalize(line) not in blocked:
             kept.append(raw_line)
             continue
         parts = re.split(r"(?<=[.!?])\s+", " ".join(line.split()))
@@ -462,7 +478,8 @@ def _sentences(text: str) -> list[str]:
     for raw_line in text.splitlines():
         line = raw_line.strip().strip("#").strip()
         if not line or _looks_like_heading(raw_line):
-            continue
+            if not line or not _looks_instruction_like(line):
+                continue
         parts = re.split(r"(?<=[.!?])\s+", " ".join(line.split()))
         sentences.extend(part.strip() for part in parts if len(part.split()) >= 3)
     if sentences:
